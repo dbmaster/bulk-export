@@ -33,49 +33,27 @@ model.tables.each { table  ->
     logger.info("Generate statement for table ${table.name}")
 
     println generateSql(table, dialect)
-	
-	println "\n\n\n------------------\n\n\n"
+    
+    println "\n\n\n------------------\n\n\n"
 }
 println "</pre>"
 
 connection.close()
 
 def generateSql(Table table, JDBCDialect dialect) {
-	def tableName   =   table.name
-	def columns		=   table.columns
+    def tableName   =   table.name
+    def columns     =   table.columns
 
-	switch (dialect.getDialectName().toLowerCase()) {
-	case "mysql":
-		def allColumns = 
-			columns.collect { column ->
-				column.isNullable() ? "    IFNULL(${column.name},'')" : "    ${column.name}"
-			}.join(",\n")
-        def query = """SELECT \n${allColumns}\n FROM ${database_name}.${tableName}";
-		if (p_max_rows!=null) {
-		     query += " LIMIT ${p_max_rows} \n"
-		}
-		query += "INTO OUTFILE '${p_output_folder}/{tableName}.dat'\n FIELDS TERMINATED BY 0x00 ESCAPED BY '\\' LINES TERMINATED BY '\r\n'"
-		return query;
-/*	   
-   case "oracle":
-       columnNames = columns.findAll { !it.type.matches("BFILE|LONG|BLOB|LONG BINARY|LONG RAW|XMLTYPE")  }.collect { "\"${it.name}\" like :search_terms" }
-       return  "select * from \"${tableName}\" where (".toString() + columnNames.join (" or \n")+") and ROWNUM <= ${p_max_rows}"
-   case "sqlserver":
-       columnNames = columns.findAll { !it.type.matches("timestamp|image|xml|sql_variant")  }
-                            .collect { "["+it.name+"] like :search_terms" }
-       tableName = "["+table.getSchema()+"].["+ table.getSimpleName()+"]"
-       return  "select top ${p_max_rows} * from ${tableName} with (NOLOCK) \nwhere ".toString() +
-                columnNames.join (" or \n      ")
-   case "nuodb":
-       columnNames = columns.findAll { !it.type.matches("image|xml")  }.collect { it.name+ " like :search_terms" }
-       return  "select * from ${tableName} \nwhere ".toString() + columnNames.join (" or \n      ") + " limit 0,${p_max_rows}"
-   default:
-       columnNames = columns.findAll { !it.type.matches("image|xml")  }.collect { it.name+" like :search_terms" }
-       return  "select * from ${tableName} \nwhere ".toString() + columnNames.join (" or \n      ") + " limit 0,${p_max_rows}"
-   }
-   
-   */ 
-	default:
-		throw new RuntimeException("Not implemented")
-	}
+    switch (dialect.getDialectName().toLowerCase()) {
+        case "mysql":
+            def allColumns = columns.collect { column -> column.isNullable() ? "    IFNULL(${column.name},'')" : "    ${column.name}" }.join(",\n")
+            def query = "SELECT \n${allColumns}\n FROM ${database_name}.${tableName}";
+            if (p_max_rows!=null) {
+                query += " LIMIT ${p_max_rows} \n"
+            }
+            query += "INTO OUTFILE '${p_output_folder}/{tableName}.dat'\n FIELDS TERMINATED BY 0x00 ESCAPED BY '\\' LINES TERMINATED BY '\r\n'"
+            return query;
+        default:
+            throw new RuntimeException("Not implemented")
+    }
 }
