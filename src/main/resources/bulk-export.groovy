@@ -57,3 +57,18 @@ def generateSql(String dbName, Table table, JDBCDialect dialect) {
             throw new RuntimeException("Not implemented")
     }
 }
+/* 
+BULK INSERT ${tableName}
+FROM '${p_import_folder}/${tableName}.dat'
+WITH
+(
+FIRSTROW = 1,
+FIELDTERMINATOR = '0x00',
+ROWTERMINATOR = '\n',
+-- LASTROW=1000,
+ERRORFILE = '${p_import_folder}/${tableName}_error.txt',
+MAXERRORS=1000000000,
+-- BATCHSIZE=10000
+TABLOCK
+)
+*/
