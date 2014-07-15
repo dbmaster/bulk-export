@@ -71,4 +71,16 @@ MAXERRORS=1000000000,
 -- BATCHSIZE=10000
 TABLOCK
 )
+
+http://dev.mysql.com/doc/refman/5.6/en/load-data.html
+
+LOAD DATA INFILE '${p_import_folder}/${tableName}.dat'
+INTO TABLE ${p_import_db}.${tableName}
+FIELDS TERMINATED BY 0x00
+	   ESCAPED BY '\\'
+       LINES TERMINATED BY '\r\n'
+        (`@variable`, fields)
+			
+SET `f1` = IF (@f1='', NULL, @f1),
+    `f2` = IF (@f2='', NULL, @f2)
 */
