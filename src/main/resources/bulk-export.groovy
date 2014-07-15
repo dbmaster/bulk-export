@@ -27,20 +27,104 @@ connection = connector.getJdbcConnection(database_name)
 dbm.closeResourceOnExit(connection)
 
 println "<pre>"
-println "-- SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;"
+
+
+if (p_action.equals("Export")) {
+	println "-- SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;"		
+} else if (p_action.equals("Import to MySQL")) {
+	println """SET FOREIGN_KEY_CHECKS = 0;
+			   SET UNIQUE_CHECKS = 0;
+               SET SESSION tx_isolation='READ-UNCOMMITTED';
+               SET sql_log_bin = 0;\n\n"""
+} else if (p_action.equals("Import to MSSQL")) {
+	// NOPE for now
+} else {
+	throw new RuntimeException("Unexpected value for action ${p_action}")
+}
+
+
+ 
 
 model.tables.each { table  ->
     logger.info("Generate statement for table ${table.name}")
+	
+	if (p_action.equals("Export")) {
+		println generateExport(database_name, table, dialect)
+	} else if (p_action.equals("Import to MySQL")) {
+		println "ALTER TABLE ${table.name} ENGINE=MyISAM;"
+     	println "ALTER TABLE ${table.name} DISABLE KEYS;"
 
-    println generateSql(database_name, table, dialect)
-    
+		println generateMySqlImport(database_name, table)
+		
+     	println "ALTER TABLE ${table.name} ENABLE KEYS;"
+	} else if (p_action.equals("Import to MSSQL")) {
+		println generateMsSqlImport(database_name, table)
+	} else {
+		throw new RuntimeException("Unexpected value for action ${p_action}")
+	}
+	
     println "\n\n\n"
 }
 println "</pre>"
 
 connection.close()
 
-def generateSql(String dbName, Table table, JDBCDialect dialect) {
+def generateExport(String dbName, Table table, JDBCDialect dialect) {
+    def tableName   =   table.name
+    def columns     =   table.columns
+
+    switch (dialect.getDialectName().toLowerCase()) {
+        case "mysql":
+            def allColumns = columns.collect { column -> column.isNullable() ? "    IFNULL(`${column.name}`,'')" : "    `${column.name}`" }.join(",\n")
+            def query = "SELECT \n${allColumns}\n FROM `${dbName}`.`${tableName}`";
+            if (p_max_rows!=null) {
+                query += " LIMIT ${p_max_rows} \n"
+            }
+            query += "\nINTO OUTFILE '${p_output_folder}/${tableName}.dat'\n FIELDS TERMINATED BY 0x00 ESCAPED BY '\\\\' LINES TERMINATED BY '\\r\\n';"
+            return query;
+        default:
+            throw new RuntimeException("Not implemented")
+    }
+}
+
+
+def generateMySqlImport(String dbName, Table table) {
+    def tableName   =   table.name
+    def columns     =   table.columns
+	
+	// http://dev.mysql.com/doc/refman/5.6/en/load-data.html
+	
+
+	def query = """LOAD DATA INFILE '${p_import_folder}/${tableName}.dat'
+                   INTO TABLE ${p_import_db}.${tableName}
+                   FIELDS TERMINATED BY 0x00
+	                      ESCAPED BY '\\\\'
+                          LINES TERMINATED BY '\\r\\n'
+                   ("""
+    
+	columns.eachWithIndex { column, idx -> 
+		query = query + (idx>0 ? ',' : '') + (column.isNullable() ? "@imp_${idx}" : "`${column.name}`")
+	}
+	query+=") \n"
+	if (query.contains("@imp")) {
+		query = query + "\n SET ";
+	}
+	def firstColumn = true
+	columns.eachWithIndex { column, idx -> 
+		if (column.isNullable()) {
+			if (firstColumn) {
+				firstColumn=false
+			} else {
+				query = query + ","
+			}
+			query = query + "\n`${column.name}` = IF(@imp_${idx}='', NULL, @imp_${idx})"
+		}
+	}
+	query+=";"
+	return query;
+}
+
+def generateMsSqlImport(String dbName, Table table) {
     def tableName   =   table.name
     def columns     =   table.columns
 
@@ -72,15 +156,4 @@ MAXERRORS=1000000000,
 TABLOCK
 )
 
-http://dev.mysql.com/doc/refman/5.6/en/load-data.html
-
-LOAD DATA INFILE '${p_import_folder}/${tableName}.dat'
-INTO TABLE ${p_import_db}.${tableName}
-FIELDS TERMINATED BY 0x00
-	   ESCAPED BY '\\'
-       LINES TERMINATED BY '\r\n'
-        (`@variable`, fields)
-			
-SET `f1` = IF (@f1='', NULL, @f1),
-    `f2` = IF (@f2='', NULL, @f2)
 */
