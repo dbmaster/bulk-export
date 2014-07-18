@@ -58,7 +58,7 @@ model.tables.each { table  ->
 		
      	println "ALTER TABLE ${table.name} ENABLE KEYS;"
 	} else if (p_action.equals("Import to MSSQL")) {
-		println generateMsSqlImport(database_name, table)
+		println generateMsSqlImport(table)
 	} else {
 		throw new RuntimeException("Unexpected value for action ${p_action}")
 	}
@@ -124,36 +124,20 @@ def generateMySqlImport(String dbName, Table table) {
 	return query;
 }
 
-def generateMsSqlImport(String dbName, Table table) {
+def generateMsSqlImport(Table table) {
     def tableName   =   table.name
-    def columns     =   table.columns
-
-    switch (dialect.getDialectName().toLowerCase()) {
-        case "mysql":
-            def allColumns = columns.collect { column -> column.isNullable() ? "    IFNULL(`${column.name}`,'')" : "    `${column.name}`" }.join(",\n")
-            def query = "SELECT \n${allColumns}\n FROM `${dbName}`.`${tableName}`";
-            if (p_max_rows!=null) {
-                query += " LIMIT ${p_max_rows} \n"
-            }
-            query += "\nINTO OUTFILE '${p_output_folder}/${tableName}.dat'\n FIELDS TERMINATED BY 0x00 ESCAPED BY '\\\\' LINES TERMINATED BY '\\r\\n';"
-            return query;
-        default:
-            throw new RuntimeException("Not implemented")
-    }
+    // def columns     =   table.columns
+	
+	return """BULK INSERT [${p_import_db}].[dbo].[${tableName}]
+              FROM '${p_import_folder}/${tableName}.dat'
+              WITH (
+				FIRSTROW = 1,
+				FIELDTERMINATOR = '0x00',
+				ROWTERMINATOR = '\\n',
+				-- LASTROW=1000,
+				ERRORFILE = '${p_import_folder}/${tableName}_error.txt',
+				MAXERRORS=1000000000,
+				-- BATCHSIZE=10000
+				TABLOCK
+			  );\n\n"""
 }
-/* 
-BULK INSERT ${tableName}
-FROM '${p_import_folder}/${tableName}.dat'
-WITH
-(
-FIRSTROW = 1,
-FIELDTERMINATOR = '0x00',
-ROWTERMINATOR = '\n',
--- LASTROW=1000,
-ERRORFILE = '${p_import_folder}/${tableName}_error.txt',
-MAXERRORS=1000000000,
--- BATCHSIZE=10000
-TABLOCK
-)
-
-*/
