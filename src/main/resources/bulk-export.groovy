@@ -54,15 +54,15 @@ model.tables.each { table  ->
         println generateExport(database_name, table, dialect)
     } else if (p_action.equals("Import to MySQL")) {
         println "ALTER TABLE ${table.name} ENGINE=MyISAM;"
-         println "ALTER TABLE ${table.name} DISABLE KEYS;"
+        println "ALTER TABLE ${table.name} DISABLE KEYS;"
 
         println generateMySqlImport(database_name, table)
         
         println "ALTER TABLE ${table.name} ENABLE KEYS;"
     } else if (p_action.equals("Import to MSSQL")) {
-        println generateCreateTable("dbo", table, dialect)
-    } else if (p_action.equals("Create schema in MSSQL")) {
         println generateMsSqlImport(table)
+    } else if (p_action.equals("Create schema in MSSQL")) {
+        println generateCreateTable("dbo", table, dialect)
     } else {
         throw new RuntimeException("Unexpected value for action ${p_action}")
     }
