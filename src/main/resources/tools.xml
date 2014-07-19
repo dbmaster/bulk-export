@@ -9,6 +9,7 @@
 					<string>Export</string>
 					<string>Import to MySQL</string>
 					<string>Import to MSSQL</string>
+					<string>Create schema in MSSQL</string>
 				</values>
 			</parameter>
 					

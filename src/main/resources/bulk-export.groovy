@@ -30,16 +30,18 @@ println "<pre>"
 
 
 if (p_action.equals("Export")) {
-	println "-- SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;"		
+    println "-- SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;"        
 } else if (p_action.equals("Import to MySQL")) {
-	println """SET FOREIGN_KEY_CHECKS = 0;
-			   SET UNIQUE_CHECKS = 0;
+    println """SET FOREIGN_KEY_CHECKS = 0;
+               SET UNIQUE_CHECKS = 0;
                SET SESSION tx_isolation='READ-UNCOMMITTED';
                SET sql_log_bin = 0;\n\n"""
+} else if (p_action.equals("Create schema in MSSQL")) {
+    // NOPE for now
 } else if (p_action.equals("Import to MSSQL")) {
-	// NOPE for now
+    // NOPE for now
 } else {
-	throw new RuntimeException("Unexpected value for action ${p_action}")
+    throw new RuntimeException("Unexpected value for action ${p_action}")
 }
 
 
@@ -47,27 +49,104 @@ if (p_action.equals("Export")) {
 
 model.tables.each { table  ->
     logger.info("Generate statement for table ${table.name}")
-	
-	if (p_action.equals("Export")) {
-		println generateExport(database_name, table, dialect)
-	} else if (p_action.equals("Import to MySQL")) {
-		println "ALTER TABLE ${table.name} ENGINE=MyISAM;"
-     	println "ALTER TABLE ${table.name} DISABLE KEYS;"
+    
+    if (p_action.equals("Export")) {
+        println generateExport(database_name, table, dialect)
+    } else if (p_action.equals("Import to MySQL")) {
+        println "ALTER TABLE ${table.name} ENGINE=MyISAM;"
+         println "ALTER TABLE ${table.name} DISABLE KEYS;"
 
-		println generateMySqlImport(database_name, table)
-		
-     	println "ALTER TABLE ${table.name} ENABLE KEYS;"
-	} else if (p_action.equals("Import to MSSQL")) {
-		println generateMsSqlImport(table)
-	} else {
-		throw new RuntimeException("Unexpected value for action ${p_action}")
-	}
-	
+        println generateMySqlImport(database_name, table)
+        
+        println "ALTER TABLE ${table.name} ENABLE KEYS;"
+    } else if (p_action.equals("Import to MSSQL")) {
+        println generateCreateTable("dbo", table, dialect)
+    } else if (p_action.equals("Create schema in MSSQL")) {
+        println generateMsSqlImport(table)
+    } else {
+        throw new RuntimeException("Unexpected value for action ${p_action}")
+    }
     println "\n\n\n"
 }
 println "</pre>"
 
 connection.close()
+
+def generateCreateTable(String schemaName, Table table, JDBCDialect dialect) {
+    def tableName   =   table.name
+    def columns     =   table.columns
+    
+    def statement = "CREATE TABLE [${schemaName}].[${tableName}] (";
+    table.columns.eachWithIndex { column,index -> 
+        statement += (index > 0 ? "," : "") + "\n    [${column.name}]";
+        switch (column.type.toLowerCase()) {
+            // INTEGER TYPES
+            case "bit": 
+            // TODO Review bit type http://www.xaprb.com/blog/2006/04/11/bit-values-in-mysql/
+            case "tinyint":  // tinyint is unsigned
+                statement+= " TINYINT";
+                break;
+            case "smallint":
+                statement+=" SMALLINT ";
+                break;
+            case "mediumint":
+            case "int":
+                statement+=" INT ";
+                break;
+            case "bigint":
+                statement+=" BIGINT ";
+                break;
+            case "decimal":
+                statement+=" DECIMAL(${column.precesion}, ${column.scale}) ";
+                break;
+            // FLOATING POINT (TODO require revision)
+            case "float":
+                statement+=" FLOAT(24) ";
+                break;
+            case "double":
+                statement+=" FLOAT(53) ";
+                break;
+            // DATE AND TIME
+            case "datetime":
+                statement+=" DATETIME2 ";
+                break;
+            case "date":
+                statement+=" DATE ";
+                break;
+            case "time":
+                statement+=" TIME ";
+                break;
+            case "timestamp":
+                statement+=" SMALLDATETIME ";
+                break;
+            case "year":
+                statement+=" SMALLINT ";
+                break;
+            // STRING    
+            case "char":
+                statement+=" CHAR(${column.size}) ";
+                break;
+            case "varchar":
+                statement+=" VARCHAR(${column.size})";
+                break;
+            case "tinytext":
+            case "text":
+            case "mediumtext":
+            case "longtext":
+                statement+=" TEXT";
+                break;
+            default: 
+                throw new RuntimeException("Unexpected data type ${column.type}")
+        }
+        statement += column.isNullable() ? " NULL " : " NOT NULL ";
+        if (column.defaultValue!=null) {
+            statement += " DEFAULT ((${column.defaultValue}))";
+        }
+        // WITH ( MEMORY_OPTIMIZED = ON )
+    }
+    statement+="\n);\n\n"
+    return statement;
+}
 
 def generateExport(String dbName, Table table, JDBCDialect dialect) {
     def tableName   =   table.name
@@ -91,53 +170,53 @@ def generateExport(String dbName, Table table, JDBCDialect dialect) {
 def generateMySqlImport(String dbName, Table table) {
     def tableName   =   table.name
     def columns     =   table.columns
-	
-	// http://dev.mysql.com/doc/refman/5.6/en/load-data.html
-	
+    
+    // http://dev.mysql.com/doc/refman/5.6/en/load-data.html
+    
 
-	def query = """LOAD DATA INFILE '${p_import_folder}/${tableName}.dat'
+    def query = """LOAD DATA INFILE '${p_import_folder}/${tableName}.dat'
                    INTO TABLE ${p_import_db}.${tableName}
                    FIELDS TERMINATED BY 0x00
-	                      ESCAPED BY '\\\\'
+                          ESCAPED BY '\\\\'
                           LINES TERMINATED BY '\\r\\n'
                    ("""
     
-	columns.eachWithIndex { column, idx -> 
-		query = query + (idx>0 ? ',' : '') + (column.isNullable() ? "@imp_${idx}" : "`${column.name}`")
-	}
-	query+=") \n"
-	if (query.contains("@imp")) {
-		query = query + "\n SET ";
-	}
-	def firstColumn = true
-	columns.eachWithIndex { column, idx -> 
-		if (column.isNullable()) {
-			if (firstColumn) {
-				firstColumn=false
-			} else {
-				query = query + ","
-			}
-			query = query + "\n`${column.name}` = IF(@imp_${idx}='', NULL, @imp_${idx})"
-		}
-	}
-	query+=";"
-	return query;
+    columns.eachWithIndex { column, idx -> 
+        query = query + (idx>0 ? ',' : '') + (column.isNullable() ? "@imp_${idx}" : "`${column.name}`")
+    }
+    query+=") \n"
+    if (query.contains("@imp")) {
+        query = query + "\n SET ";
+    }
+    def firstColumn = true
+    columns.eachWithIndex { column, idx -> 
+        if (column.isNullable()) {
+            if (firstColumn) {
+                firstColumn=false
+            } else {
+                query = query + ","
+            }
+            query = query + "\n`${column.name}` = IF(@imp_${idx}='', NULL, @imp_${idx})"
+        }
+    }
+    query+=";"
+    return query;
 }
 
 def generateMsSqlImport(Table table) {
     def tableName   =   table.name
     // def columns     =   table.columns
-	
-	return """BULK INSERT [${p_import_db}].[dbo].[${tableName}]
+    
+    return """BULK INSERT [${p_import_db}].[dbo].[${tableName}]
               FROM '${p_import_folder}/${tableName}.dat'
               WITH (
-				FIRSTROW = 1,
-				FIELDTERMINATOR = '0x00',
-				ROWTERMINATOR = '\\n',
-				-- LASTROW=1000,
-				ERRORFILE = '${p_import_folder}/${tableName}_error.txt',
-				MAXERRORS=1000000000,
-				-- BATCHSIZE=10000
-				TABLOCK
-			  );\n\n"""
+                FIRSTROW = 1,
+                FIELDTERMINATOR = '0x00',
+                ROWTERMINATOR = '\\n',
+                -- LASTROW=1000,
+                ERRORFILE = '${p_import_folder}/${tableName}_error.txt',
+                MAXERRORS=1000000000,
+                -- BATCHSIZE=10000
+                TABLOCK
+              );\n\n"""
 }
