@@ -82,7 +82,11 @@ def generateCreateTable(String schemaName, Table table, JDBCDialect dialect) {
         switch (column.type.toLowerCase()) {
             // INTEGER TYPES
             case "bit": 
-            // TODO Review bit type http://www.xaprb.com/blog/2006/04/11/bit-values-in-mysql/
+            // TODO Review bit type 
+            // http://www.xaprb.com/blog/2006/04/11/bit-values-in-mysql/
+            // Guide to Migrating from MySQL to SQL Server 2012 (pdf)
+            // http://blogs.technet.com/b/bpaulblog/archive/2010/06/13/mysql-to-ms-sql-server-2008-r2-migration-experience-with-ssma.aspx
+            // http://convertdb.com/features
             case "tinyint":  // tinyint is unsigned
                 statement+= " TINYINT";
                 break;
