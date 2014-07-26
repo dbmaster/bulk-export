@@ -4,23 +4,25 @@
         <description>Generates SELECT INTO OUTFILE statements for mysql database so file can be imported later into SQL Server</description>
 
         <parameters>
-			<parameter name="p_action" 		 title="Generate" type="string" required="true">
-				<values>
-					<string>Export</string>
-					<string>Import to MySQL</string>
-					<string>Import to MSSQL</string>
-					<string>Create schema in MSSQL</string>
-				</values>
-			</parameter>
-					
+            <parameter name="p_action"          title="Generate" type="string" required="true">
+                <values>
+                    <string>Export</string>
+                    <string>Import to MySQL</string>
+                    <string>Import to MSSQL</string>
+                    <string>Create schema in MSSQL</string>
+                </values>
+            </parameter>
+                    
             <parameter name="p_database"     title="Source Database" type="string" required="true" 
                        suggestion="project_databases" width="300" />
 
             <parameter name="p_output_folder" title="Output Folder"  type="string" required="true" width="300" />
-            <parameter name="p_max_rows"     title="Max rows per table"  type="integer" required="false"  />
+            <parameter name="p_max_rows"      title="Max rows per table"  type="integer" required="false"  />
+            <parameter name="p_max_errors"    title="Max Errors"  type="integer" required="false"  />
 
             <parameter name="p_import_folder"   title="Import folder"  type="string" width="300" required="false"  />
-            <parameter name="p_import_db"     	title="Import DB"  	   type="string" required="false"  />
+            <parameter name="p_error_folder"    title="Error folder"   type="string" width="300" required="false"  />
+            <parameter name="p_import_db"         title="Import DB"         type="string" required="false"  />
         </parameters>
 
         <output  script="bulk-export.groovy" type="html" />

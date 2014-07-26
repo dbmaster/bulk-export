@@ -218,8 +218,8 @@ def generateMsSqlImport(Table table) {
                 FIELDTERMINATOR = '0x00',
                 ROWTERMINATOR = '\\n',
                 -- LASTROW=1000,
-                ERRORFILE = '${p_import_folder}/${tableName}_error.txt',
-                MAXERRORS=1000000000,
+                ${p_error_folder==null ? "": "ERRORFILE = '"+p_error_folder+"}/"+tableName+"_error.txt',"}
+                ${p_max_errors==null ? "": "MAXERRORS="+p_max_errors+","}
                 -- BATCHSIZE=10000
                 TABLOCK
               );\n\n"""
