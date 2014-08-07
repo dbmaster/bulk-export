@@ -11,9 +11,9 @@ def database_name  = p_database.split("\\.")[1]
 
 RevEngineeringOptions options = new RevEngineeringOptions();
 options.database = database_name
-options.importIndexes = false
-options.importViews = false
-options.importProcedures = false
+options.importIndexes = true
+options.importViews = true
+options.importProcedures = true
 
 connectionInfo = connectionSrv.findByName(server_name)
 connector = ConnectionProvider.getConnector(connectionInfo)
@@ -44,12 +44,16 @@ if (p_action.equals("Export")) {
     throw new RuntimeException("Unexpected value for action ${p_action}")
 }
 
-
+// TODO Add parameter
+def skipTables = ["a", "b"]
  
 
 model.tables.each { table  ->
+    if (skipTables.contains ( table.name)) {
+		logger.info("Skipping table ${table.name}")
+		return;
+	}
     logger.info("Generate statement for table ${table.name}")
-    
     if (p_action.equals("Export")) {
         println generateExport(database_name, table, dialect)
     } else if (p_action.equals("Import to MySQL")) {
@@ -71,6 +75,47 @@ model.tables.each { table  ->
 println "</pre>"
 
 connection.close()
+
+
+
+def quote (type, value) {
+   if (value == null) return value
+
+    def qSymbol = '\''
+
+        switch (type.toLowerCase()) {
+            // INTEGER TYPES
+            case "bit": 
+            case "tinyint":  // tinyint is unsigned
+            case "smallint":
+            case "mediumint":
+            case "int":
+            case "bigint":
+            case "decimal":
+            case "float":
+            case "double":
+                return value;
+            // DATE AND TIME
+            case "datetime":
+            case "date":
+            case "time":
+            case "timestamp":
+	        return qSymbol + value + qSymbol;
+            case "year":
+	        return value;
+            // STRING    
+            case "char":
+            case "varchar":
+            case "tinytext":
+            case "text":
+            case "mediumtext":
+            case "longtext":
+	         return qSymbol + value.replaceAll('"','\\\\"') + qSymbol;
+            default: 
+                throw new RuntimeException("Unexpected data type ${type}")
+        }
+}
+
 
 def generateCreateTable(String schemaName, Table table, JDBCDialect dialect) {
     def tableName   =   table.name
@@ -144,11 +189,44 @@ def generateCreateTable(String schemaName, Table table, JDBCDialect dialect) {
         }
         statement += column.isNullable() ? " NULL " : " NOT NULL ";
         if (column.defaultValue!=null) {
-            statement += " DEFAULT ((${column.defaultValue}))";
+            statement += " DEFAULT ((${quote(column.type, column.defaultValue)}))";
         }
+		
         // WITH ( MEMORY_OPTIMIZED = ON )
     }
+	
     statement+="\n);\n\n"
+	
+	table.indexes.each { index ->
+		def cols = { idx -> index.columns.collect { c-> "[${c.columnName}]"+(c.asc ? "" : " DESC") }.join(", ") }
+		if (index.primaryKey) {
+			statement += "ALTER TABLE dbo.[${tableName}] ADD CONSTRAINT [pk_${tableName}] PRIMARY KEY CLUSTERED (${cols(index)});\n";
+		} else {
+			statement += "CREATE ";
+			if (index.unique) { statement+=" UNIQUE" } else { statement+=" NONCLUSTERED" }
+			statement+= " INDEX [ix_${tableName}_${index.name}] \nON [${tableName}] (${cols(index)});\n";
+		}
+		
+//		logger.debug("""Index name = ${index.name} type=${index.type} 
+//		                fillFactor=${index.fillFactor} disable=${index.disabled}
+//						isPrimary=${index.primaryKey} isUnique=${index.unique}""");
+						
+//		index.columns.each { ic -> logger.debug("""column = ${ic.columnName} asc = ${ic.asc}"""); }
+	}
+	
+		def columnNames  = table.columns.collect { c -> "[${c.name}]" }.join(", ")
+		statement += """\n\nINSERT INTO [${p_import_db}].dbo.[${tableName}] 
+		                (${columnNames})
+						SELECT ${columnNames}
+						FROM mysql_msc_results.dbo.[${tableName}];\n\n"""
+	
+	
+	// IX_zipinfo_type
+	// ON dbo.zip_info	(type)
+	// WITH( STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+
+	// CREATE CLUSTERED INDEX cx_wait_data on #wait_data(batch_id);
+	
     return statement;
 }
 
